@@ -175,23 +175,10 @@ PYTHONPATH=. python fdeph_eval/attacks/nhash_evasion_steps.py \
 
 # 4. Sanity Check After Each Run
 
-Run this immediately after each experiment:
+Run this immediately after each experiment: (ensure to update CSV file name)
 
 ```bash
-python - << 'PY'
-import pandas as pd, sys
-
-path = sys.argv[1]
-df = pd.read_csv(path)
-
-success = df[df.success == 1]
-grouped = success.groupby("image_id").size()
-
-print("Total rows:", len(df))
-print("Unique images:", df.image_id.nunique())
-print("Images succeeded:", len(grouped))
-print("Max success per image:", int(grouped.max()) if len(grouped) else 0)
-PY ./logs/attack_steps_nhash_evasion_mt500.csv
+python experiments/sanity_check.py ./logs/attack_steps_nhash_evasion_mt500.csv
 ```
 
 Expected:
