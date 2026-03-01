@@ -206,3 +206,54 @@ def export_time_to_success_table(df: pd.DataFrame, out_csv: str | Path) -> pd.Da
     Path(out_csv).parent.mkdir(parents=True, exist_ok=True)
     events.to_csv(out_csv, index=False)
     return events
+
+def time_to_success_stats(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Returns a one-row table with median and 95th percentile for steps/time.
+    """
+    events = compute_success_events(df)
+    if events.empty:
+        return pd.DataFrame([{
+            "n_images": df["image_id"].nunique(),
+            "n_succeeded": 0,
+            "success_rate": 0.0,
+            "median_steps": np.nan,
+            "p95_steps": np.nan,
+            "median_time_ms": np.nan,
+            "p95_time_ms": np.nan,
+        }])
+
+    n_images = df["image_id"].nunique()
+    n_succeeded = len(events)
+    sr = n_succeeded / n_images if n_images else 0.0
+
+    return pd.DataFrame([{
+        "n_images": n_images,
+        "n_succeeded": n_succeeded,
+        "success_rate": sr,
+        "median_steps": float(events["success_step"].median()),
+        "p95_steps": float(events["success_step"].quantile(0.95)),
+        "median_time_ms": float(events["success_elapsed_ms"].median()),
+        "p95_time_ms": float(events["success_elapsed_ms"].quantile(0.95)),
+    }])
+
+
+def plot_time_to_success_hist(df: pd.DataFrame, out_path: Optional[str | Path] = None, title: str = "") -> None:
+    """
+    Histogram of time-to-success (ms) over images that succeeded.
+    """
+    events = compute_success_events(df)
+    if events.empty:
+        print("No successes to plot.")
+        return
+
+    plt.figure()
+    plt.hist(events["success_elapsed_ms"], bins=30)
+    plt.xlabel("Time to success (ms)")
+    plt.ylabel("Number of images")
+    plt.title(title or "Time-to-success histogram")
+
+    if out_path:
+        Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(out_path, dpi=200, bbox_inches="tight")
+    plt.show()
