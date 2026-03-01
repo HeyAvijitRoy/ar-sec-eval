@@ -257,3 +257,4 @@ def plot_time_to_success_hist(df: pd.DataFrame, out_path: Optional[str | Path] =
         Path(out_path).parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(out_path, dpi=200, bbox_inches="tight")
     plt.show()
+
