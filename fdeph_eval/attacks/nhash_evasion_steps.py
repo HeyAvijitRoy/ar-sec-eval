@@ -27,7 +27,8 @@ from losses.mse_loss import mse_loss
 from losses.quality_losses import ssim_loss
 from utils.hashing import compute_hash, load_hash_matrix
 from utils.image_processing import load_and_preprocess_img, save_images
-from utils.logger import Logger
+from fdeph_eval.utils.structured_logger import StructuredCSVLogger
+# from utils.logger import Logger
 from metrics.hamming_distance import hamming_distance
 import threading
 import concurrent.futures
@@ -36,7 +37,8 @@ import copy
 import time
 
 
-def optimization_thread(url_list, device, seed, loss_fkt, logger, args):
+# def optimization_thread(url_list, device, seed, loss_fkt, logger, args):
+def optimization_thread(url_list, device, seed, loss_fkt, step_logger, args):
     # Store and reload source image to avoid image changes due to different formats
     id = randint(1, 10000000)
     temp_img = f'curr_image_{id}'
@@ -105,38 +107,111 @@ def optimization_thread(url_list, device, seed, loss_fkt, logger, args):
                 optimizer.param_groups[0]['params'][0].grad *= edge_mask
             optimizer.step()
 
-            # Check for hash changes
+            # # Check for hash changes
+            # if i % args.check_interval == 0:
+            #     with torch.no_grad():
+            #         save_images(source, './temp', temp_img)
+            #         current_img = load_and_preprocess_img(
+            #             f'./temp/{temp_img}.png', device, resize=True)
+            #         check_output = model(current_img)
+            #         source_hash_hex = compute_hash(check_output, seed)
+            #         source_hash_bin = compute_hash(
+            #             check_output, seed, binary=True)
+
+            #         # Log results and finish if hash has changed
+            #         if source_hash_hex != unmodified_hash_hex:
+            #             if hamming_distance(source_hash_bin.unsqueeze(0), unmodified_hash_bin.unsqueeze(0)) >= args.hamming:
+            #                 optimized_file = f'{args.output_folder}/{input_file_name}_opt'
+            #                 if args.output_folder != '':
+            #                     save_images(source, args.output_folder,
+            #                                 f'{input_file_name}_opt')
+            #                 # Compute metrics in the [0, 1] space
+            #                 l2_distance = torch.norm(
+            #                     ((current_img + 1) / 2) - ((orig_image + 1) / 2), p=2)
+            #                 linf_distance = torch.norm(
+            #                     ((current_img + 1) / 2) - ((orig_image + 1) / 2), p=float("inf"))
+            #                 ssim_distance = ssim_loss(
+            #                     (current_img + 1) / 2, (orig_image + 1) / 2)
+            #                 print(
+            #                     f'Finishing after {i+1} steps - L2 distance: {l2_distance:.4f} - L-Inf distance: {linf_distance:.4f} - SSIM: {ssim_distance:.4f}')
+
+            #                 logger_data = [img, optimized_file + '.png', l2_distance.item(),
+            #                                linf_distance.item(), ssim_distance.item(), i+1, target_loss.item()]
+            #                 logger.add_line(logger_data)
+            #                 break
+            
+            # Check & log at interval AR
             if i % args.check_interval == 0:
                 with torch.no_grad():
+                    # Timing
+                    if i == 0:
+                        attack_start = time.perf_counter()
+                    elapsed_ms = (time.perf_counter() - attack_start) * 1000.0
+
+                    # Re-save & reload to match original behavior
                     save_images(source, './temp', temp_img)
                     current_img = load_and_preprocess_img(
                         f'./temp/{temp_img}.png', device, resize=True)
+
                     check_output = model(current_img)
                     source_hash_hex = compute_hash(check_output, seed)
-                    source_hash_bin = compute_hash(
-                        check_output, seed, binary=True)
+                    source_hash_bin = compute_hash(check_output, seed, binary=True)
 
-                    # Log results and finish if hash has changed
-                    if source_hash_hex != unmodified_hash_hex:
-                        if hamming_distance(source_hash_bin.unsqueeze(0), unmodified_hash_bin.unsqueeze(0)) >= args.hamming:
-                            optimized_file = f'{args.output_folder}/{input_file_name}_opt'
-                            if args.output_folder != '':
-                                save_images(source, args.output_folder,
-                                            f'{input_file_name}_opt')
-                            # Compute metrics in the [0, 1] space
-                            l2_distance = torch.norm(
-                                ((current_img + 1) / 2) - ((orig_image + 1) / 2), p=2)
-                            linf_distance = torch.norm(
-                                ((current_img + 1) / 2) - ((orig_image + 1) / 2), p=float("inf"))
-                            ssim_distance = ssim_loss(
-                                (current_img + 1) / 2, (orig_image + 1) / 2)
-                            print(
-                                f'Finishing after {i+1} steps - L2 distance: {l2_distance:.4f} - L-Inf distance: {linf_distance:.4f} - SSIM: {ssim_distance:.4f}')
+                    # Distances (raw + normalized)
+                    dist_raw = hamming_distance(
+                        source_hash_bin.unsqueeze(0),
+                        unmodified_hash_bin.unsqueeze(0),
+                        normalize=False
+                    )
+                    dist_norm = hamming_distance(
+                        source_hash_bin.unsqueeze(0),
+                        unmodified_hash_bin.unsqueeze(0),
+                        normalize=True
+                    )
 
-                            logger_data = [img, optimized_file + '.png', l2_distance.item(),
-                                           linf_distance.item(), ssim_distance.item(), i+1, target_loss.item()]
-                            logger.add_line(logger_data)
-                            break
+                    # Distortion metrics in [0,1] space (same as original)
+                    l2_distance = torch.norm(
+                        ((current_img + 1) / 2) - ((orig_image + 1) / 2), p=2
+                    )
+                    linf_distance = torch.norm(
+                        ((current_img + 1) / 2) - ((orig_image + 1) / 2), p=float("inf")
+                    )
+                    ssim_distance = ssim_loss(
+                        (current_img + 1) / 2, (orig_image + 1) / 2
+                    )
+
+                    # Success condition (same meaning as original script):
+                    # - hash changed AND Hamming distance >= threshold
+                    success = int(
+                        (source_hash_hex != unmodified_hash_hex) and (dist_norm >= args.hamming)
+                    )
+
+                    # Write one step row (long format)
+                    step_logger.log_row({
+                        "image_id": input_file_name,
+                        "hash_method": args.hash_method,
+                        "attack_type": args.attack_type,
+                        "step": i + 1,
+                        "elapsed_ms": round(elapsed_ms, 3),
+                        "dist_raw": float(dist_raw.item()),
+                        "dist_norm": float(dist_norm.item()),
+                        "l2": float(l2_distance.item()),
+                        "linf": float(linf_distance.item()),
+                        "ssim": float(ssim_distance.item()),
+                        "success": success,
+                        "source_path": img
+                    })
+
+                    # If successful, save output and stop
+                    if success == 1:
+                        if args.output_folder != '':
+                            save_images(source, args.output_folder, f'{input_file_name}_opt')
+                        print(
+                            f'Finishing after {i+1} steps - '
+                            f'L2: {l2_distance:.4f} - LInf: {linf_distance:.4f} - SSIM: {ssim_distance:.4f} - '
+                            f'd_raw: {dist_raw:.4f} - d_norm: {dist_norm:.4f}'
+                        )
+                        break            #--AR
     os.remove(f'./temp/{temp_img}.png')
 
 
@@ -168,6 +243,14 @@ def main():
                         default=4, type=int, help='Number of parallel threads')
     parser.add_argument('--check_interval', dest='check_interval',
                         default=1, type=int, help='Hash change interval checking')
+        # ---- FDEPH Eval Logging ----
+    parser.add_argument('--step_log_csv', dest='step_log_csv',
+                        default='./logs/attack_steps_nhash_evasion.csv', type=str,
+                        help='CSV path for step-by-step (long format) logging')
+    parser.add_argument('--hash_method', dest='hash_method',
+                        default='nhash', type=str, help='hash method label for logs')
+    parser.add_argument('--attack_type', dest='attack_type',
+                        default='evasion', type=str, help='attack type label for logs')
     args = parser.parse_args()
 
     # Create temp folder
@@ -191,12 +274,42 @@ def main():
                 print(
                     f'Folder {args.output_folder} already exists and is not empty.')
 
-    # Prepare logging
-    logging_header = ['file', 'optimized_file', 'l2',
-                      'l_inf', 'ssim', 'steps', 'target_loss', 'Hamming']
-    logger = Logger(args.experiment_name, logging_header, output_dir='./logs')
-    logger.add_line(['Hyperparameter', args.source, args.learning_rate,
-                     args.optimizer, args.ssim_weight, args.edges_only, args.hamming])
+    # # Prepare logging
+    # logging_header = ['file', 'optimized_file', 'l2',
+    #                   'l_inf', 'ssim', 'steps', 'target_loss', 'Hamming']
+    # logger = Logger(args.experiment_name, logging_header, output_dir='./logs')
+    # logger.add_line(['Hyperparameter', args.source, args.learning_rate,
+    #                  args.optimizer, args.ssim_weight, args.edges_only, args.hamming])
+    
+    # ---- Step-by-step CSV logger (long format) AR ----
+    step_header = [
+        "image_id", "hash_method", "attack_type",
+        "step", "elapsed_ms",
+        "dist_raw", "dist_norm",
+        "l2", "linf", "ssim",
+        "success",
+        "source_path"
+    ]
+    step_logger = StructuredCSVLogger(args.step_log_csv, step_header)
+
+    # Log a single "hyperparams" row as step=0 for reproducibility
+    step_logger.log_row({
+        "image_id": "__HYPERPARAMS__",
+        "hash_method": args.hash_method,
+        "attack_type": args.attack_type,
+        "step": 0,
+        "elapsed_ms": 0,
+        "dist_raw": "",
+        "dist_norm": "",
+        "l2": "",
+        "linf": "",
+        "ssim": "",
+        "success": "",
+        "source_path": f"source={args.source}; lr={args.learning_rate}; opt={args.optimizer}; "
+                       f"ssim_w={args.ssim_weight}; edges_only={args.edges_only}; "
+                       f"hamming_T={args.hamming}; check_interval={args.check_interval}; "
+                       f"threads={args.num_threads}"
+    })   
 
     # define loss function
     loss_function = mse_loss
@@ -213,8 +326,10 @@ def main():
     images = images[:args.sample_limit]
 
     # Start threads
-    def thread_function(x): return optimization_thread(
-        images, device, seed, loss_function, logger, args)
+    # def thread_function(x): return optimization_thread(
+    #     images, device, seed, loss_function, logger, args)
+    def thread_function(_):
+        return optimization_thread(images, device, seed, loss_function, step_logger, args)
     threads_args = [(images, device, seed, loss_function,
                      logger, args) for i in range(args.num_threads)]
     with concurrent.futures.ThreadPoolExecutor(max_workers=128) as executor:
