@@ -2,13 +2,13 @@
 
 Author: Avijit Roy  
 Project: FDEPH – Attack Efficiency Analysis  
-Environment: ACCESS CI (Ubuntu + GPU) 
+Environment: ACCESS CI (Ubuntu + GPU)  
 
 ---
 
-# 0. Environment Setup (One-Time)
+# 0. Environment & Authenticity Verification (One-Time)
 
-Ensure NeuralHash is authentic:
+## 0.1 Verify NeuralHash Seed Loads
 
 ```bash
 PYTHONPATH=. python -c "from utils.hashing import load_hash_matrix; load_hash_matrix(); print('seed OK')"
@@ -19,6 +19,33 @@ Expected output:
 ```
 seed OK
 ```
+
+---
+
+## 0.2 Verify Seed File Integrity (Freeze Evidence)
+
+```bash
+python - << 'PY'
+import hashlib
+p="models/coreml_model/neuralhash_128x96_seed1.dat"
+b=open(p,"rb").read()
+print("bytes:", len(b))
+print("sha256:", hashlib.sha256(b).hexdigest())
+PY
+```
+
+Record the SHA256 for reproducibility.
+
+---
+
+## 0.3 Verify Deterministic Hash (CPU Check)
+
+```bash
+PYTHONPATH=. python experiments/hash_self_consistency.py ./inputs/inputs_50/<image>.JPEG
+```
+
+Run multiple times.
+Expected: identical hex values across runs.
 
 ---
 
@@ -85,18 +112,18 @@ PYTHONPATH=. python experiments/make_inputs_sample.py \
 
 ---
 
-## 2.3 Create #### Image Set
+## 2.3 Create Larger Set (Example: 2000)
 
 ```bash
 PYTHONPATH=. python experiments/make_inputs_sample.py \
   --src ./data/imagenette2-320/val \
-  --out ./inputs/inputs_#### \
-  --n #### \
+  --out ./inputs/inputs_2000 \
+  --n 2000 \
   --seed 42 \
   --clear
 ```
 
-Note:
+Notes:
 
 * Same seed → nested subsets (500 ⊂ 1000 ⊂ 2000).
 * Ensures reproducibility across machines.
@@ -151,7 +178,25 @@ PYTHONPATH=. python fdeph_eval/attacks/nhash_evasion_steps.py \
 
 ---
 
-## 3.3 MT2000 (Big Run)
+## 3.3 Threshold Sweep (0.08 / 0.10 / 0.12)
+
+```bash
+python experiments/run_nhash_evasion_sweep.py
+```
+
+Produces:
+
+```
+logs/attack_steps_nhash_evasion_mt500_T0.08.csv
+logs/attack_steps_nhash_evasion_mt500_T0.10.csv
+logs/attack_steps_nhash_evasion_mt500_T0.12.csv
+```
+
+Each run automatically executes sanity checks.
+
+---
+
+## 3.4 MT2000 (Large-Scale Run)
 
 ```bash
 rm -f ./logs/attack_steps_nhash_evasion_mt2000.csv
@@ -175,22 +220,20 @@ PYTHONPATH=. python fdeph_eval/attacks/nhash_evasion_steps.py \
 
 # 4. Sanity Check After Each Run
 
-Run this immediately after each experiment: (ensure to update CSV file name)
-
 ```bash
-python experiments/sanity_check.py ./logs/attack_steps_nhash_evasion_mt500.csv
+python experiments/sanity_check.py ./logs/<your_log_file>.csv
 ```
 
 Expected:
 
 * `Max success per image: 1`
-* Images succeeded ≈ number of images (unless some fail)
+* `Images failed: 0` (for successful experiments)
+* `Images with non-consecutive steps: 0`
+* `Images with decreasing elapsed_ms: 0`
 
 ---
 
 # 5. Monitoring During Run
-
-Live monitor:
 
 ```bash
 watch -n 2 "wc -l ./logs/attack_steps_nhash_evasion_mt500.csv"
@@ -200,34 +243,39 @@ watch -n 2 "wc -l ./logs/attack_steps_nhash_evasion_mt500.csv"
 
 # 6. Output Artifacts
 
-For each run you produce:
+Each run produces:
 
-* Long-format CSV:
-
-  ```
-  ./logs/attack_steps_nhash_evasion_*.csv
-  ```
+```
+./logs/attack_steps_nhash_evasion_*.csv
+```
 
 Each row contains:
 
 * image_id
 * step
 * elapsed_ms
-* dist_raw (Hamming)
-* dist_norm (Hamming / 96)
+* dist_raw (Hamming distance)
+* dist_norm (normalized Hamming)
 * L2
 * L∞
 * SSIM
 * success flag
 
-These files are the foundation for plotting and statistical analysis.
+These files are used for:
+
+* Distance vs Steps curves
+* Distance vs Time curves
+* Success rate curves
+* Time-to-success histogram
+* Median & 95th percentile statistics
+* Threshold sweep comparison tables
 
 ---
 
 # 7. Reproducibility Notes
 
 * Always delete CSV before rerun.
-* Never change seed unless intentionally studying variance.
+* Never change sampling seed unless intentionally studying variance.
 * Do not commit input image folders to Git.
-* Commit this RUNBOOK.md for protocol traceability.
-
+* Record seed SHA256 and environment versions.
+* Commit this RUNBOOK.md for full protocol traceability.
