@@ -77,3 +77,20 @@ def get_hashes_of_dataset(dataset: Dataset, model: torch.nn.Module, seed: torch.
         [[i for _ in range(min_num_examples_in_class)] for i in range(len(dataset.classes))])
 
     return generated_hashes, hash_target_classes
+
+def to_hex(hash_bits: np.ndarray) -> str:
+    """
+    Convert a binary hash vector (0/1) into hexadecimal string.
+    Expects a 1D numpy array of 0/1 integers.
+    """
+
+    # Ensure it is flat
+    bits = hash_bits.flatten().astype(np.uint8)
+
+    # Convert bits to string like "010101..."
+    bit_string = ''.join(str(int(b)) for b in bits)
+
+    # Convert binary string → integer → hex
+    hex_string = hex(int(bit_string, 2))[2:]
+
+    return hex_string
