@@ -45,7 +45,7 @@ def optimization_thread(url_list, device, seed, loss_fkt, step_logger, args):
     id = randint(1, 10000000)
     temp_img = f'curr_image_{id}'
     model = NeuralHash()
-    model.load_state_dict(torch.load('./models/model.pth'))
+    model.load_state_dict(torch.load('./models/model.pth', weights_only=True))
     model.to(device)
     while True:
         with images_lock:
@@ -213,8 +213,11 @@ def optimization_thread(url_list, device, seed, loss_fkt, step_logger, args):
                             save_images(source, args.output_folder, f'{input_file_name}_opt')
                         print(
                             f'Finishing after {i+1} steps - '
-                            f'L2: {l2_distance:.4f} - LInf: {linf_distance:.4f} - SSIM: {ssim_distance:.4f} - '
-                            f'd_raw: {dist_raw:.4f} - d_norm: {dist_norm:.4f}'
+                            f"L2: {float(l2_distance.item() if hasattr(l2_distance, 'item') else l2_distance):.4f} - "
+                            f"LInf: {float(linf_distance.item() if hasattr(linf_distance, 'item') else linf_distance):.4f} - "
+                            f"SSIM: {float(ssim_distance.item() if hasattr(ssim_distance, 'item') else ssim_distance):.4f} - "
+                            f"d_raw: {float(dist_raw.item() if hasattr(dist_raw, 'item') else dist_raw):.4f} - "
+                            f"d_norm: {float(dist_norm.item() if hasattr(dist_norm, 'item') else dist_norm):.4f}"
                         )
                         break            #--AR
     # os.remove(f'./temp/{temp_img}.png')
