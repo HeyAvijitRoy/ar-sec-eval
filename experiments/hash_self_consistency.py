@@ -2,10 +2,15 @@
 # Author: Avijit Roy
 #
 # Purpose:
-# - Verify self-consistency of NeuralHash for a given image
-# - Ensures same hash within-run and across separate runs (CPU determinism test)
+# - Verify NeuralHash determinism for a given image
+# - Uses the *real* trained weights (models/model.pth)
+# - Confirms stable hash across separate runs
 
-import os
+# PYTHONPATH=. python experiments/hash_self_consistency.py ./inputs/inputs_50/n03000684_400.JPEG
+# PYTHONPATH=. python experiments/hash_self_consistency.py ./inputs/inputs_50/n03000684_400.JPEG
+# PYTHONPATH=. python experiments/hash_self_consistency.py ./inputs/inputs_50/n03000684_400.JPEG
+# Expected: Same hex and hamming distance 0 across runs
+
 import sys
 import numpy as np
 import torch
@@ -13,12 +18,6 @@ from PIL import Image
 
 from models.neuralhash import NeuralHash
 from utils.hashing import load_hash_matrix, compute_hash
-
-
-def set_determinism_cpu():
-    torch.set_num_threads(1)
-    torch.backends.cudnn.enabled = False  # force CPU-only path
-    # No need for cudnn flags if we disable cudnn; keep it simple.
 
 
 def pil_to_tensor_rgb(pil_img: Image.Image, size=(96, 128)) -> torch.Tensor:
@@ -31,15 +30,20 @@ def pil_to_tensor_rgb(pil_img: Image.Image, size=(96, 128)) -> torch.Tensor:
 
 
 def main(img_path: str):
-    set_determinism_cpu()
+    # Hard-pin CPU for determinism check
+    device = torch.device("cpu")
+    torch.set_num_threads(1)
 
     seed = load_hash_matrix()
-    nh = NeuralHash()
+    nh = NeuralHash().to(device)
     nh.eval()
-    nh.to("cpu")
+
+    # ? Load trained weights (THIS WAS MISSING)
+    state = torch.load("./models/model.pth", map_location=device)
+    nh.load_state_dict(state)
 
     img = Image.open(img_path).convert("RGB")
-    x = pil_to_tensor_rgb(img).to("cpu")
+    x = pil_to_tensor_rgb(img).to(device)
 
     with torch.no_grad():
         logits1 = nh(x)
