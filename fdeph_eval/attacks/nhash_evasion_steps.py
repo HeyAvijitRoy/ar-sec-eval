@@ -36,6 +36,8 @@ from itertools import repeat
 import copy
 import time
 
+images_lock = threading.Lock()
+
 
 # def optimization_thread(url_list, device, seed, loss_fkt, logger, args):
 def optimization_thread(url_list, device, seed, loss_fkt, step_logger, args):
@@ -45,8 +47,11 @@ def optimization_thread(url_list, device, seed, loss_fkt, step_logger, args):
     model = NeuralHash()
     model.load_state_dict(torch.load('./models/model.pth'))
     model.to(device)
-    while(url_list != []):
-        img = url_list.pop(0)
+    while True:
+        with images_lock:
+            if not url_list:
+                break
+            img = url_list.pop(0)
         print('Thread working on ' + img)
         if args.optimize_original:
             resize = T.Resize((360, 360))
@@ -212,7 +217,10 @@ def optimization_thread(url_list, device, seed, loss_fkt, step_logger, args):
                             f'd_raw: {dist_raw:.4f} - d_norm: {dist_norm:.4f}'
                         )
                         break            #--AR
-    os.remove(f'./temp/{temp_img}.png')
+    # os.remove(f'./temp/{temp_img}.png')
+    temp_path = f'./temp/{temp_img}.png'
+    if os.path.exists(temp_path):
+        os.remove(temp_path)    
 
 
 def main():
@@ -243,7 +251,7 @@ def main():
                         default=4, type=int, help='Number of parallel threads')
     parser.add_argument('--check_interval', dest='check_interval',
                         default=1, type=int, help='Hash change interval checking')
-        # ---- FDEPH Eval Logging ----
+    # ---- FDEPH Eval Logging ----
     parser.add_argument('--step_log_csv', dest='step_log_csv',
                         default='./logs/attack_steps_nhash_evasion.csv', type=str,
                         help='CSV path for step-by-step (long format) logging')
@@ -330,12 +338,11 @@ def main():
     #     images, device, seed, loss_function, logger, args)
     def thread_function(_):
         return optimization_thread(images, device, seed, loss_function, step_logger, args)
-    threads_args = [(images, device, seed, loss_function,
-                     logger, args) for i in range(args.num_threads)]
-    with concurrent.futures.ThreadPoolExecutor(max_workers=128) as executor:
-        executor.map(thread_function, threads_args)
 
-    logger.finish_logging()
+    # Launch exactly args.num_threads workers; each worker pops from the shared images list
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.num_threads) as executor:
+        list(executor.map(thread_function, range(args.num_threads)))
+
     end = time.time()
     print(end - start)
 
