@@ -1,0 +1,3 @@
+77bcb037a64d2246624fbdbf3a2a8e82bb085760f5b690f13f0b91f3312a92f9  models/model.onnx
+f3353715d678d815f839cf87ea9141fd68f92f4db89bbf2748abf307a712ead3  models/model.pth
+312344458ca5468eced6f50163c09d88dbc9f3470891f1b078852b01c9a0fce9  models/coreml_model/neuralhash_128x96_seed1.dat
