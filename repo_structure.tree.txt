@@ -1,0 +1,43 @@
+.
+├── .dockerignore
+├── .gitignore
+├── Dockerfile
+├── LICENSE
+├── README.md
+├── adv1_collision_attack.py
+├── adv1_gan_attack.py
+├── adv2_evasion_attack.py
+├── adv2_few_pixels_attack.py
+├── adv3_evaluation.ipynb
+├── adv3_robustness_check.py
+├── adv4_evaluation.ipynb
+├── adv4_information_extraction.py
+├── images
+│   ├── collision_example.png
+│   ├── hash_change_example.png
+│   ├── neural_hash_architecture.png
+│   └── transformations.png
+├── losses
+│   ├── hinge_loss.py
+│   ├── mse_loss.py
+│   └── quality_losses.py
+├── metrics
+│   └── hamming_distance.py
+├── models
+│   └── neuralhash.py
+├── repo_structure.tree.txt
+├── requirements.txt
+├── rootless.Dockerfile
+└── utils
+    ├── compute_dataset_hashes.py
+    ├── hashing.py
+    ├── image_converter.py
+    ├── image_processing.py
+    ├── load_generator.py
+    ├── logger.py
+    ├── metrics.py
+    ├── onnx2pytorch.py
+    ├── training.py
+    └── transforms.py
+
+5 directories, 35 files
