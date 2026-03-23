@@ -110,6 +110,7 @@ def optimization_thread(url_list, device, step_logger, args):
 
         # ---- Optimization cycle --------------------------------------------
         print(f"\nStart optimizing on {img}")
+        attack_start = time.perf_counter()   # AR: start timer before loop
         for i in range(10000):
             with torch.no_grad():
                 source.data = torch.clamp(source, min=-1, max=1)
@@ -142,10 +143,11 @@ def optimization_thread(url_list, device, step_logger, args):
             # ---- Check & log at interval -----------------------------------
             if i % args.check_interval == 0:
                 with torch.no_grad():
-                    # Timing
-                    if i == 0:
-                        attack_start = time.perf_counter()
+                    # # Timing
+                    # if i == 0:
+                    #     attack_start = time.perf_counter()
                     elapsed_ms = (time.perf_counter() - attack_start) * 1000.0
+
 
                     # Round-trip through disk (matches nhash behaviour)
                     save_images(source, "./temp", temp_img)
