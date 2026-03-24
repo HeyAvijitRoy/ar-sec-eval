@@ -95,6 +95,7 @@ def optimization_thread(url_list, device, seed, loss_fkt, step_logger, args):
 
         # Optimization cycle
         print(f'\nStart optimizing on {img}')
+        attack_start = time.perf_counter()   # AR: start timer before loop
         for i in range(10000):
             with torch.no_grad():
                 source.data = torch.clamp(source, min=-1, max=1)
@@ -149,8 +150,8 @@ def optimization_thread(url_list, device, seed, loss_fkt, step_logger, args):
             if i % args.check_interval == 0:
                 with torch.no_grad():
                     # Timing
-                    if i == 0:
-                        attack_start = time.perf_counter()
+                    # if i == 0:
+                        # attack_start = time.perf_counter()
                     elapsed_ms = (time.perf_counter() - attack_start) * 1000.0
 
                     # Re-save & reload to match original behavior
