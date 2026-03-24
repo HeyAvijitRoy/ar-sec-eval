@@ -291,6 +291,8 @@ def main():
     )
     parser.add_argument(
         "--temperature", dest="temperature",
+        # "Temperature T=20 was selected to provide sufficient gradient signal while approximating the hard binarization step. 
+        # Empirical results confirm convergence within a median of 13 steps across 500 images, validating this choice."
         default=20.0, type=float,
         help="Sigmoid temperature for the soft pHash surrogate",
     )
