@@ -157,4 +157,5 @@ ar-works/
 evasion_attack_outputs_phash_pilot/
 evasion_attack_outputs_phash/
 evasion_attack_outputs_pdq_pilot/
-evasion_attack_outputs_pdq_patchtest_5
+evasion_attack_outputs_pdq_patchtest_5/
+evasion_attack_outputs_pdq_patchtest_diag/
