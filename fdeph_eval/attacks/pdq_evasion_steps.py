@@ -138,8 +138,12 @@ def optimization_thread(url_list, device, step_logger, args):
             # ---- SSIM gradient (differentiable, use autograd) --------------
             source_for_ssim = source.detach().requires_grad_(True)
             ssim_val = ssim_loss(orig_image, source_for_ssim)
-            ssim_val.backward()
-            ssim_grad = source_for_ssim.grad.detach()
+            if ssim_val.requires_grad:
+                ssim_val.backward()
+                ssim_grad = source_for_ssim.grad.detach().clone()
+                source_for_ssim.grad = None
+            else:
+                ssim_grad = torch.zeros_like(source)
 
             # ---- Combined update -------------------------------------------
             # Gradient ASCENT on hash distance, descent on SSIM loss
