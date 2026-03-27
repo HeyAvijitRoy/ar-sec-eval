@@ -1,0 +1,22 @@
+,NeuralHash Collision,pHash Collision
+Total images,500.0,500.0
+Successful,474.0,211.0
+Success rate (%),94.8,42.2
+Failed,26.0,289.0
+Steps median,721.0,171.0
+Steps mean,1247.9,525.3
+Steps P95,4656.0,2941.0
+Steps max,9531.0,7051.0
+L2 median,20.0273,13.5301
+L2 mean,20.9542,14.3566
+L2 max,50.734,43.9043
+L-Inf median,0.2627,0.1098
+L-Inf mean,0.3192,0.1691
+L-Inf max,1.0,0.9569
+SSIM median,0.9713,0.9822
+SSIM mean,0.9637,0.962
+SSIM min,0.7504,0.6656
+SSIM >= 0.99,20.0,57.0
+SSIM >= 0.95,384.0,171.0
+SSIM < 0.95,90.0,40.0
+SSIM < 0.90,22.0,20.0

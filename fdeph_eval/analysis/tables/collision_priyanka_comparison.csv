@@ -1,0 +1,3 @@
+Study,Dataset,Success rate (%),Steps (max),L2 range,SSIM
+"Priyanka (CASIA, T=0.30)","CASIA v2.0 test (1,555 images)",92.28,2000,10–30 (mean ~11.23),~1.0 (clustered)
+"Ours (ImageNette, no threshold)",ImageNette val (500 images),94.8,9531,3.2–50.7 (median 20.03),median 0.9713

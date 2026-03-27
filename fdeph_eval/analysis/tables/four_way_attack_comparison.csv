@@ -1,0 +1,5 @@
+Attack,Success rate (%),Median steps,Median L2,Median L∞,Median SSIM,Reference
+NeuralHash Evasion (T=0.10),100.0,37,N/A,~0.04–0.08,>0.996,Phase 1
+NeuralHash Collision,94.8,721,20.0273,0.2627,0.9713,Phase 3
+pHash Evasion (T=0.10),100.0,13,1.364,0.0078,0.9991,Phase 2
+pHash Collision,42.2,171,13.5301,0.1098,0.9822,Phase 3
