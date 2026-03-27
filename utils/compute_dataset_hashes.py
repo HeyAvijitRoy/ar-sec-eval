@@ -39,6 +39,10 @@ def main():
         description='Perform neural collision attack.')
     parser.add_argument('--source', dest='source', type=str,
                         default='data/imagenet_test', help='image folder to compute hashes for')
+    parser.add_argument('--output_path', dest='output_path', type=str,
+                        default='',
+                        help='Full path for output CSV. '
+                             'Default: dataset_hashes/{folder_name}_hashes.csv')
     args = parser.parse_args()
 
     # Load images
@@ -80,10 +84,16 @@ def main():
         hash_hex = compute_hash(
             outputs_unmodified, seed, binary=False)
 
-        result_df = result_df.append(
-            {'image': img_name, 'hash_bin': hash_bin, 'hash_hex': hash_hex}, ignore_index=True)
+        result_df = pd.concat(
+            [result_df,
+             pd.DataFrame([{'image': img_name, 'hash_bin': hash_bin, 'hash_hex': hash_hex}])],
+            ignore_index=True)
     os.makedirs('./dataset_hashes', exist_ok=True)
-    if os.path.isfile(args.source):
+    if args.output_path != '':
+        out_path = args.output_path
+        os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+        result_df.to_csv(out_path)
+    elif os.path.isfile(args.source):
         result_df.to_csv(f'./dataset_hashes/{args.source}_hashes.csv')
     elif os.path.isdir(args.source):
         path = pathlib.PurePath(args.source)

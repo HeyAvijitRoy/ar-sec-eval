@@ -18,6 +18,8 @@ from utils.image_processing import load_and_preprocess_img, save_images
 from utils.logger import Logger
 import threading
 
+images_lock = threading.Lock()
+
 def optimization_thread(url_list, device, seed, loss_fkt, logger, args, target_hashes, bin_hex_hash_dict, target_hash_dict):
     print(f'Process {threading.get_ident()} started')
 
@@ -28,8 +30,11 @@ def optimization_thread(url_list, device, seed, loss_fkt, logger, args, target_h
     model.to(device)
 
     # Start optimizing images
-    while(url_list != []):
-        img = url_list.pop(0)
+    while True:
+        with images_lock:
+            if not url_list:
+                break
+            img = url_list.pop(0)
         # Store and reload source image to avoid image changes due to different formats
         source = load_and_preprocess_img(img, device)
         input_file_name = img.rsplit(sep='/', maxsplit=1)[1].split('.')[0]
@@ -108,8 +113,19 @@ def optimization_thread(url_list, device, seed, loss_fkt, logger, args, target_h
                         print(
                             f'Finishing after {i+1} steps - L2 distance: {l2_distance:.4f} - L-Inf distance: {linf_distance:.4f} - SSIM: {ssim_distance:.4f}')
 
-                        logger_data = [img, optimized_file + '.png', l2_distance.item(),
-                                       linf_distance.item(), ssim_distance.item(), i+1, target_hash_dict[target_hash_hex][1]]
+                        target_image_path = target_hash_dict[target_hash_hex][1]
+                        target_file = f'{args.output_folder}/{input_file_name}_target'
+                        if args.output_folder != '':
+                            # Save the target image for side-by-side inspection
+                            target_img_tensor = load_and_preprocess_img(
+                                target_image_path, device)
+                            save_images(target_img_tensor, args.output_folder,
+                                        f'{input_file_name}_target')
+
+                        logger_data = [img, optimized_file + '.png',
+                                       target_file + '.png', target_image_path,
+                                       l2_distance.item(), linf_distance.item(),
+                                       ssim_distance.item(), i+1]
                         logger.add_line(logger_data)
                         break
 
@@ -140,6 +156,10 @@ def main():
                         default=4, type=int, help='Number of parallel threads')
     parser.add_argument('--check_interval', dest='check_interval',
                         default=10, type=int, help='Hash change interval checking')
+    parser.add_argument('--target_image_folder', dest='target_image_folder',
+                        type=str, default='',
+                        help='Root folder where target images are stored '
+                             '(image paths come from the target hashset CSV)')
     args = parser.parse_args()
 
     # Load and prepare components
@@ -177,8 +197,8 @@ def main():
                     f'Folder {args.output_folder} already exists and is not empty.')
 
     # Prepare logging
-    logging_header = ['file', 'optimized_file', 'l2',
-                      'l_inf', 'ssim', 'steps']
+    logging_header = ['file', 'optimized_file', 'target_file',
+                      'target_image_path', 'l2', 'l_inf', 'ssim', 'steps']
     logger = Logger(args.experiment_name, logging_header, output_dir='./logs')
     logger.add_line(['Hyperparameter', args.source, args.learning_rate,
                      args.optimizer, args.ssim_weight, args.edges_only])

@@ -160,3 +160,6 @@ evasion_attack_outputs_pdq_pilot/
 evasion_attack_outputs_pdq_patchtest_5/
 evasion_attack_outputs_pdq_patchtest_diag/
 evasion_attack_outputs_pdq_patchtest_nossim/
+
+#Collision attack
+collision_attack_outputs_*/ 
