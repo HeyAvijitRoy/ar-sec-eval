@@ -106,9 +106,11 @@ def optimization_thread(url_list, device, step_logger, args):
             spsa_grad = spsa_grad_accum / args.spsa_samples
 
             source_for_ssim = source.detach().requires_grad_(True)
-            ssim_val = ssim_loss(orig_image, source_for_ssim)
-            if ssim_val.requires_grad:
-                ssim_val.backward()
+            # Match the white-box objective: minimize negative SSIM so the
+            # update preserves similarity instead of pushing away from source.
+            visual_loss = -ssim_loss(orig_image, source_for_ssim)
+            if visual_loss.requires_grad:
+                visual_loss.backward()
                 ssim_grad = source_for_ssim.grad.detach().clone()
             else:
                 ssim_grad = torch.zeros_like(source)
