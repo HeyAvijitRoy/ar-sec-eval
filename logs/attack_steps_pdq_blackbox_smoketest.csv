@@ -1,0 +1,12 @@
+image_id,hash_method,attack_type,step,elapsed_ms,dist_raw,dist_norm,best_dist_norm,l2,linf,ssim,success,source_path
+__HYPERPARAMS__,pdq,evasion_blackbox_pdq,0,,,,,,,,,source=./inputs/pdq_subset_10; lr=0.02; c_spsa=0.02; spsa_samples=4; max_steps=5; ssim_w=1.0; hamming_T=0.08; threads=1; oracle=current_image_median
+n01440764_n01440764_8052,pdq,evasion_blackbox_pdq,1,192.696,0.0,0.0,0.0,0.0,0.0,0.0,0,./inputs/pdq_subset_10/n01440764_n01440764_8052.jpeg
+n01440764_n01440764_8052,pdq,evasion_blackbox_pdq,2,329.931,0.0,0.0,0.0,0.0,0.0,0.0,0,./inputs/pdq_subset_10/n01440764_n01440764_8052.jpeg
+n01440764_n01440764_8052,pdq,evasion_blackbox_pdq,3,410.074,0.0,0.0,0.0,0.0,0.0,0.0,0,./inputs/pdq_subset_10/n01440764_n01440764_8052.jpeg
+n01440764_n01440764_8052,pdq,evasion_blackbox_pdq,4,1014.064,0.0,0.0,0.0,0.0,0.0,0.0,0,./inputs/pdq_subset_10/n01440764_n01440764_8052.jpeg
+n01440764_n01440764_8052,pdq,evasion_blackbox_pdq,5,1105.898,0.0,0.0,0.0,0.0,0.0,0.0,0,./inputs/pdq_subset_10/n01440764_n01440764_8052.jpeg
+n02102040_n02102040_1592,pdq,evasion_blackbox_pdq,1,20.426,0.0,0.0,0.0,0.0,0.0,0.0,0,./inputs/pdq_subset_10/n02102040_n02102040_1592.jpeg
+n02102040_n02102040_1592,pdq,evasion_blackbox_pdq,2,91.539,0.0,0.0,0.0,0.0,0.0,0.0,0,./inputs/pdq_subset_10/n02102040_n02102040_1592.jpeg
+n02102040_n02102040_1592,pdq,evasion_blackbox_pdq,3,168.346,0.0,0.0,0.0,0.4305339455604553,0.003921598196029663,0.9997603297233582,0,./inputs/pdq_subset_10/n02102040_n02102040_1592.jpeg
+n02102040_n02102040_1592,pdq,evasion_blackbox_pdq,4,249.161,2.0,0.0078125,0.0078125,1.0345585346221924,0.003921598196029663,0.9986189007759094,0,./inputs/pdq_subset_10/n02102040_n02102040_1592.jpeg
+n02102040_n02102040_1592,pdq,evasion_blackbox_pdq,5,343.89,2.0,0.0078125,0.0078125,1.1627037525177002,0.003921598196029663,0.9982565641403198,0,./inputs/pdq_subset_10/n02102040_n02102040_1592.jpeg
