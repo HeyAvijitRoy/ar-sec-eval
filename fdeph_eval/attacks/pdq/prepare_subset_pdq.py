@@ -6,7 +6,6 @@ attack/evaluation sampling should come from the held-out ``val`` split. By
 default this script builds a class-balanced 10-image subset: one image from
  each of the 10 Imagenette classes.
 
-Copied filenames are suffixed with ``_pdq`` before the extension.
 """
 
 from __future__ import annotations
@@ -84,7 +83,7 @@ def main() -> None:
                 existing.unlink()
 
     for image_path in chosen:
-        dst_name = f"{image_path.parent.name}_{image_path.stem}_pdq{image_path.suffix.lower()}"
+        dst_name = f"{image_path.parent.name}_{image_path.stem}{image_path.suffix.lower()}"
         shutil.copy2(image_path, out_dir / dst_name)
 
     print(f"Source: {src}")
