@@ -1,0 +1,4 @@
+Algorithm,Success rate,Median steps,Median time (ms),Median L-Inf,Median SSIM
+NeuralHash (96-bit neural),100%,37,5878,~0.04-0.08,>0.996
+PDQ (256-bit DCT),500/500 (100.0%),31,1265,0.0353,0.9837
+pHash (64-bit DCT),100%,13,1194,0.0078,0.9991
