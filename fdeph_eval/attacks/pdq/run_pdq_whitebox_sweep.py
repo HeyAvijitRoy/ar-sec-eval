@@ -49,7 +49,7 @@ LR          = "0.002"
 OPTIMIZER   = "Adam"
 SSIM_WEIGHT = "5.0"
 TEMPERATURE = "20.0"
-CHECK_INT   = "1"
+CHECK_INT   = "5"
 
 
 def check_prerequisites(source_dir):
