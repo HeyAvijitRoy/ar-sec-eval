@@ -139,13 +139,31 @@ PYTHONPATH=. python fdeph_eval/attacks/pdq/pdq_collision_whitebox_surrogate.py \
 Quick check:
 
 ```bash
+wc -l ./logs/attack_steps_pdq_collision_exact_smoketest.csv
 tail -n 20 ./logs/attack_steps_pdq_collision_exact_smoketest.csv
 ```
 
 What to look for:
+- the terminal should end with:
+  `[pdq-collision] Finished. Logged ... data rows to ...`
 - `target_dist_raw` decreasing
 - `target_dist_norm` decreasing
 - `success` remains `0` unless an exact collision is found
+
+If you see only the header and `__HYPERPARAMS__` row:
+- the run was interrupted too early, or
+- the script printed an exception during image processing
+
+The current script now also:
+- prints per-image exceptions to stderr
+- warns if you are appending to an existing log file
+
+For a clean smoke test, remove the old log first:
+
+```bash
+rm -f ./logs/attack_steps_pdq_collision_exact_smoketest.csv
+rm -rf ./collision_attack_outputs_pdq_exact_smoketest
+```
 
 ## 7. Exact-Match Main Subset Run
 
@@ -172,7 +190,14 @@ Outputs:
 Inspect:
 
 ```bash
+wc -l ./logs/attack_steps_pdq_collision_subset.csv
 tail -n 20 ./logs/attack_steps_pdq_collision_subset.csv
+```
+
+Expected terminal ending:
+
+```text
+[pdq-collision] Finished. Logged ... data rows to ./logs/attack_steps_pdq_collision_subset.csv
 ```
 
 Basic success count:
@@ -200,6 +225,13 @@ Recommended thresholds to try in order:
 
 ### 8A. Threshold-Match Smoke Test At `0.08`
 
+Clean old smoke-test outputs first:
+
+```bash
+rm -f ./logs/attack_steps_pdq_collision_threshold_smoketest.csv
+rm -rf ./collision_attack_outputs_pdq_threshold_smoketest
+```
+
 ```bash
 PYTHONPATH=. python fdeph_eval/attacks/pdq/pdq_collision_whitebox_surrogate.py \
   --source ./inputs/pdq_subset_10 \
@@ -214,6 +246,13 @@ PYTHONPATH=. python fdeph_eval/attacks/pdq/pdq_collision_whitebox_surrogate.py \
 ```
 
 ### 8B. Threshold-Match Main Subset Run At `0.08`
+
+If you want a fresh subset log instead of append behavior:
+
+```bash
+rm -f ./logs/attack_steps_pdq_collision_subset.csv
+rm -rf ./collision_attack_outputs_pdq_subset
+```
 
 ```bash
 PYTHONPATH=. python fdeph_eval/attacks/pdq/run_pdq_collision_subset.py \
@@ -368,3 +407,4 @@ PY
 - The current target-selection logic chooses the nearest distinct target hash from the target hashset CSV.
 - The current collision attack is white-box only.
 - No existing evasion files were modified for this workflow.
+- The collision script is append-only with respect to the CSV logger, so reuse of the same `--step_log_csv` path will add another `__HYPERPARAMS__` row and more step rows unless you delete the file first.

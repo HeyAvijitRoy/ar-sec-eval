@@ -11,9 +11,11 @@ import concurrent.futures
 import csv
 import os
 import pathlib
+import subprocess
 import sys
 import threading
 import time
+import traceback
 from os.path import isfile, join
 from random import randint
 
@@ -51,7 +53,7 @@ def load_target_hashset(csv_path: str, device: str):
                 {
                     "image_path": image_path,
                     "hash_bin": torch.tensor(
-                        [int(b) for b in hash_bin_str], dtype=torch.float32, device=device
+                        [int(b) for b in hash_bin_str], dtype=torch.float32
                     ),
                     "hash_bin_str": hash_bin_str,
                     "hash_hex": hash_hex_str,
@@ -60,6 +62,50 @@ def load_target_hashset(csv_path: str, device: str):
     if not target_entries:
         raise RuntimeError(f"No targets found in {csv_path}")
     return target_entries
+
+
+def resolve_target_hashset_path(target_hashset: str) -> str:
+    requested = pathlib.Path(target_hashset).expanduser()
+    requested_abs = requested if requested.is_absolute() else (REPO_ROOT / requested)
+    if requested_abs.exists():
+        return str(requested_abs)
+
+    dataset_hashes_dir = REPO_ROOT / "dataset_hashes"
+    candidates = sorted(dataset_hashes_dir.glob("*_pdq_hashes.csv")) if dataset_hashes_dir.exists() else []
+    if candidates:
+        imagenette_candidates = [p for p in candidates if "imagenette" in p.name.lower()]
+        chosen = imagenette_candidates[0] if imagenette_candidates else candidates[0]
+        print(
+            f"[pdq-collision] Warning: target hashset not found at {requested_abs}. "
+            f"Using existing PDQ hashset: {chosen}",
+            flush=True,
+        )
+        return str(chosen)
+
+    default_source = REPO_ROOT / "data" / "imagenette2-320" / "train"
+    if default_source.exists():
+        requested_abs.parent.mkdir(parents=True, exist_ok=True)
+        cmd = [
+            sys.executable,
+            str(REPO_ROOT / "fdeph_eval" / "attacks" / "pdq" / "compute_dataset_hashes_pdq.py"),
+            "--source",
+            str(default_source),
+            "--output_path",
+            str(requested_abs),
+        ]
+        print(
+            f"[pdq-collision] target hashset not found. Generating PDQ hashset at {requested_abs}...",
+            flush=True,
+        )
+        subprocess.run(cmd, check=True)
+        if requested_abs.exists():
+            return str(requested_abs)
+
+    raise FileNotFoundError(
+        f"Target hashset not found: {requested_abs}. "
+        f"Generate it with: PYTHONPATH=. python fdeph_eval/attacks/pdq/compute_dataset_hashes_pdq.py "
+        f"--source ./data/imagenette2-320/train --output_path {requested_abs}"
+    )
 
 
 def choose_target(source_path: str, source_hash_bin: torch.Tensor, source_hash_hex: str, target_entries):
@@ -77,7 +123,7 @@ def choose_target(source_path: str, source_hash_bin: torch.Tensor, source_hash_h
         dist = float(
             hamming_distance(
                 source_hash_bin.unsqueeze(0),
-                entry["hash_bin"].unsqueeze(0),
+                entry["hash_bin"].to(source_hash_bin.device).unsqueeze(0),
                 normalize=True,
             ).item()
         )
@@ -103,121 +149,127 @@ def optimization_thread(url_list, device, step_logger, args, target_entries):
                 break
             img = url_list.pop(0)
 
-        print("Thread working on " + img)
-        source = load_and_preprocess_img(img, device, resize=True)
-        input_file_name = os.path.splitext(os.path.basename(img))[0]
+        try:
+            print("Thread working on " + img, flush=True)
+            source = load_and_preprocess_img(img, device, resize=True)
+            input_file_name = os.path.splitext(os.path.basename(img))[0]
 
-        if args.output_folder:
-            save_images(source, args.output_folder, f"{input_file_name}")
+            if args.output_folder:
+                save_images(source, args.output_folder, f"{input_file_name}")
 
-        orig_image = source.clone()
-        with torch.no_grad():
-            official_source_hash, source_hash_hex, _ = compute_pdq_hard(source)
-            _, _, surrogate_source_median = compute_pdq_soft_surrogate(source)
-            target_entry, initial_target_dist = choose_target(
-                img, official_source_hash, source_hash_hex, target_entries
-            )
-            target_hash = target_entry["hash_bin"]
-            target_image_path = target_entry["image_path"]
-            target_hash_hex = target_entry["hash_hex"]
-            target_image = load_and_preprocess_img(target_image_path, device, resize=True)
-
-        source.requires_grad = True
-        if args.optimizer == "Adam":
-            optimizer = torch.optim.Adam(params=[source], lr=args.learning_rate)
-        elif args.optimizer == "SGD":
-            optimizer = torch.optim.SGD(params=[source], lr=args.learning_rate)
-        else:
-            raise RuntimeError(f"Unsupported optimizer: {args.optimizer}")
-
-        print(f"\nStart PDQ collision optimization on {img}")
-        print(f"  Target hash : {target_hash_hex}")
-        print(f"  Target image: {target_image_path}")
-        attack_start = time.perf_counter()
-        best_target_dist_norm = initial_target_dist
-
-        for i in range(args.max_steps):
+            orig_image = source.clone()
             with torch.no_grad():
-                source.data = source.data.clamp(-1, 1)
+                official_source_hash, source_hash_hex, _ = compute_pdq_hard(source)
+                _, _, surrogate_source_median = compute_pdq_soft_surrogate(source)
+                target_entry, initial_target_dist = choose_target(
+                    img, official_source_hash, source_hash_hex, target_entries
+                )
+                target_hash = target_entry["hash_bin"].to(source.device)
+                target_image_path = target_entry["image_path"]
+                target_hash_hex = target_entry["hash_hex"]
+                target_image = load_and_preprocess_img(target_image_path, device, resize=True)
 
-            soft_hash, _, _ = compute_pdq_soft_surrogate(
-                source,
-                median_ref=surrogate_source_median,
-                temperature=args.temperature,
-            )
-            target_loss = collision_target_loss(soft_hash, target_hash)
-            visual_loss = -ssim_loss(orig_image, source)
-            total_loss = target_loss + (0.99 ** i) * args.ssim_weight * visual_loss
+            source.requires_grad = True
+            if args.optimizer == "Adam":
+                optimizer = torch.optim.Adam(params=[source], lr=args.learning_rate)
+            elif args.optimizer == "SGD":
+                optimizer = torch.optim.SGD(params=[source], lr=args.learning_rate)
+            else:
+                raise RuntimeError(f"Unsupported optimizer: {args.optimizer}")
 
-            optimizer.zero_grad()
-            total_loss.backward()
-            optimizer.step()
+            print(f"\nStart PDQ collision optimization on {img}", flush=True)
+            print(f"  Target hash : {target_hash_hex}", flush=True)
+            print(f"  Target image: {target_image_path}", flush=True)
+            attack_start = time.perf_counter()
+            best_target_dist_norm = initial_target_dist
 
-            if i % args.check_interval == 0:
+            for i in range(args.max_steps):
                 with torch.no_grad():
-                    elapsed_ms = (time.perf_counter() - attack_start) * 1000.0
-                    save_images(source, "./temp", temp_img)
-                    current_img = load_and_preprocess_img(
-                        f"./temp/{temp_img}.png", device, resize=True
-                    )
-                    current_hash_bin, current_hash_hex, _ = compute_pdq_hard(current_img)
+                    source.data = source.data.clamp(-1, 1)
 
-                    target_dist_raw = hamming_distance(
-                        current_hash_bin.unsqueeze(0),
-                        target_hash.unsqueeze(0),
-                        normalize=False,
-                    )
-                    target_dist_norm = hamming_distance(
-                        current_hash_bin.unsqueeze(0),
-                        target_hash.unsqueeze(0),
-                        normalize=True,
-                    )
-                    target_dist_norm_val = float(target_dist_norm.item())
-                    if target_dist_norm_val < best_target_dist_norm:
-                        best_target_dist_norm = target_dist_norm_val
+                soft_hash, _, _ = compute_pdq_soft_surrogate(
+                    source,
+                    median_ref=surrogate_source_median,
+                    temperature=args.temperature,
+                )
+                target_loss = collision_target_loss(soft_hash, target_hash)
+                visual_loss = -ssim_loss(orig_image, source)
+                total_loss = target_loss + (0.99 ** i) * args.ssim_weight * visual_loss
 
-                    l2_distance = torch.norm(
-                        ((current_img + 1) / 2) - ((orig_image + 1) / 2), p=2
-                    )
-                    linf_distance = torch.norm(
-                        ((current_img + 1) / 2) - ((orig_image + 1) / 2),
-                        p=float("inf"),
-                    )
-                    ssim_distance = ssim_loss(
-                        (current_img + 1) / 2, (orig_image + 1) / 2
-                    )
+                optimizer.zero_grad()
+                total_loss.backward()
+                optimizer.step()
 
-                    success = int(target_dist_norm_val <= args.target_hamming)
-                    step_logger.log_row(
-                        {
-                            "image_id": input_file_name,
-                            "hash_method": args.hash_method,
-                            "attack_type": args.attack_type,
-                            "target_image_id": os.path.splitext(os.path.basename(target_image_path))[0],
-                            "target_hash_hex": target_hash_hex,
-                            "step": i + 1,
-                            "elapsed_ms": round(elapsed_ms, 3),
-                            "target_dist_raw": float(target_dist_raw.item()),
-                            "target_dist_norm": target_dist_norm_val,
-                            "best_target_dist_norm": best_target_dist_norm,
-                            "l2": float(l2_distance.item()),
-                            "linf": float(linf_distance.item()),
-                            "ssim": float(ssim_distance.item()),
-                            "success": success,
-                            "source_path": img,
-                            "target_path": target_image_path,
-                        }
-                    )
-                    if success == 1:
-                        if args.output_folder:
-                            save_images(source, args.output_folder, f"{input_file_name}_opt_pdq_collision")
-                            save_images(target_image, args.output_folder, f"{input_file_name}_target_pdq_collision")
-                        print(
-                            f"Finishing after {i+1} steps - "
-                            f"target_d_raw={float(target_dist_raw.item()):.1f} - "
-                            f"target_d_norm={target_dist_norm_val:.4f}"
+                if i % args.check_interval == 0:
+                    with torch.no_grad():
+                        elapsed_ms = (time.perf_counter() - attack_start) * 1000.0
+                        save_images(source, "./temp", temp_img)
+                        current_img = load_and_preprocess_img(
+                            f"./temp/{temp_img}.png", device, resize=True
                         )
-                        break
+                        current_hash_bin, current_hash_hex, _ = compute_pdq_hard(current_img)
+                        current_hash_bin = current_hash_bin.to(target_hash.device)
+
+                        target_dist_raw = hamming_distance(
+                            current_hash_bin.unsqueeze(0),
+                            target_hash.unsqueeze(0),
+                            normalize=False,
+                        )
+                        target_dist_norm = hamming_distance(
+                            current_hash_bin.unsqueeze(0),
+                            target_hash.unsqueeze(0),
+                            normalize=True,
+                        )
+                        target_dist_norm_val = float(target_dist_norm.item())
+                        if target_dist_norm_val < best_target_dist_norm:
+                            best_target_dist_norm = target_dist_norm_val
+
+                        l2_distance = torch.norm(
+                            ((current_img + 1) / 2) - ((orig_image + 1) / 2), p=2
+                        )
+                        linf_distance = torch.norm(
+                            ((current_img + 1) / 2) - ((orig_image + 1) / 2),
+                            p=float("inf"),
+                        )
+                        ssim_distance = ssim_loss(
+                            (current_img + 1) / 2, (orig_image + 1) / 2
+                        )
+
+                        success = int(target_dist_norm_val <= args.target_hamming)
+                        step_logger.log_row(
+                            {
+                                "image_id": input_file_name,
+                                "hash_method": args.hash_method,
+                                "attack_type": args.attack_type,
+                                "target_image_id": os.path.splitext(os.path.basename(target_image_path))[0],
+                                "target_hash_hex": target_hash_hex,
+                                "step": i + 1,
+                                "elapsed_ms": round(elapsed_ms, 3),
+                                "target_dist_raw": float(target_dist_raw.item()),
+                                "target_dist_norm": target_dist_norm_val,
+                                "best_target_dist_norm": best_target_dist_norm,
+                                "l2": float(l2_distance.item()),
+                                "linf": float(linf_distance.item()),
+                                "ssim": float(ssim_distance.item()),
+                                "success": success,
+                                "source_path": img,
+                                "target_path": target_image_path,
+                            }
+                        )
+                        if success == 1:
+                            if args.output_folder:
+                                save_images(source, args.output_folder, f"{input_file_name}_opt_pdq_collision")
+                                save_images(target_image, args.output_folder, f"{input_file_name}_target_pdq_collision")
+                            print(
+                                f"Finishing after {i+1} steps - "
+                                f"target_d_raw={float(target_dist_raw.item()):.1f} - "
+                                f"target_d_norm={target_dist_norm_val:.4f}",
+                                flush=True,
+                            )
+                            break
+        except Exception as exc:
+            print(f"[pdq-collision] Error while processing {img}: {exc}", file=sys.stderr, flush=True)
+            traceback.print_exc()
 
     temp_path = f"./temp/{temp_img}.png"
     if os.path.exists(temp_path):
@@ -256,9 +308,15 @@ def main():
     os.makedirs(os.path.dirname(os.path.abspath(args.step_log_csv)), exist_ok=True)
     if args.output_folder:
         os.makedirs(args.output_folder, exist_ok=True)
+    if os.path.exists(args.step_log_csv) and os.path.getsize(args.step_log_csv) > 0:
+        print(
+            f"[pdq-collision] Warning: appending to existing log file {args.step_log_csv}",
+            flush=True,
+        )
 
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    target_entries = load_target_hashset(args.target_hashset, device)
+    resolved_target_hashset = resolve_target_hashset_path(args.target_hashset)
+    target_entries = load_target_hashset(resolved_target_hashset, device)
 
     step_header = [
         "image_id", "hash_method", "attack_type",
@@ -276,7 +334,7 @@ def main():
             "attack_type": args.attack_type,
             "step": 0,
             "source_path": (
-                f"source={args.source}; target_hashset={args.target_hashset}; "
+                f"source={args.source}; target_hashset={resolved_target_hashset}; "
                 f"lr={args.learning_rate}; opt={args.optimizer}; "
                 f"ssim_w={args.ssim_weight}; temperature={args.temperature}; "
                 f"max_steps={args.max_steps}; target_hamming_T={args.target_hamming}; "
@@ -303,6 +361,12 @@ def main():
                 range(args.num_threads),
             )
         )
+    with open(args.step_log_csv, newline="", encoding="utf-8") as csvfile:
+        row_count = sum(1 for _ in csv.DictReader(csvfile))
+    print(
+        f"[pdq-collision] Finished. Logged {row_count} data rows to {args.step_log_csv}",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":

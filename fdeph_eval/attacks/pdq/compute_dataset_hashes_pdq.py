@@ -68,7 +68,12 @@ def main():
             continue
 
         hash_bin = "".join("1" if b > 0.5 else "0" for b in hard_hash.tolist())
-        rows.append({"image": img_name, "hash_bin": hash_bin, "hash_hex": hash_hex})
+        img_path = pathlib.Path(img_name).resolve()
+        try:
+            image_field = img_path.relative_to(REPO_ROOT).as_posix()
+        except ValueError:
+            image_field = str(img_path)
+        rows.append({"image": image_field, "hash_bin": hash_bin, "hash_hex": hash_hex})
 
     result_df = pd.DataFrame(rows, columns=["image", "hash_bin", "hash_hex"])
 
