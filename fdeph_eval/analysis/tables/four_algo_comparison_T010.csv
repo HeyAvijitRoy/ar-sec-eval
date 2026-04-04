@@ -1,0 +1,5 @@
+algorithm,bits,arch,steps_median,steps_mean,steps_p95,l_inf_median,ssim_median,time_ms_median,success_rate
+pHash-64,64,DCT classical,13,19.3,40,0.0078,0.9991,1194,1.0
+PDQ,256,DCT enhanced,31,29.3,46,0.0353,0.9837,1266,1.0
+pHash-256,256,DCT extended (ours),35.0,46.294,103.19999999999982,0.0196078717708587,0.9953038394451141,5338.563124999837,1.0
+NeuralHash,96,Neural MobileNet,37,46.5,112,0.0196,0.9987,5878,1.0
